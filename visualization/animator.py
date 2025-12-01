@@ -20,17 +20,6 @@ def make_animation(df, obstacles, target, GX, GY, U, V):
     robot_rect = Rectangle((-L/2, -W/2), L, W, fill=True, alpha=0.6, zorder=6, color="red")
     ax.add_patch(robot_rect)
 
-    # Build capsule for sensing/repulsion region in robot-local coords:
-    # rectangle spans from -back to +front along x and width 2*lat along y
-    front = cfg.MAX_FRONT_OBST_DIST
-    back = cfg.MAX_BACK_OBST_DIST
-    lat = cfg.MAX_LATERAL_OBST_DIST
-
-    # Center rectangle of the capsule: lower-left corner at (-back, -lat)
-    capsule_rect = Rectangle((-back, -lat), front + back, 2.0 * lat,
-                             fill=True, alpha=0.0, zorder=2, edgecolor=None, facecolor="orange")
-    ax.add_patch(capsule_rect)
-
     ax.set_xlim(-5, 105)
     ax.set_ylim(-30, 30)
     ax.set_aspect("equal", adjustable="box")
@@ -59,10 +48,9 @@ def make_animation(df, obstacles, target, GX, GY, U, V):
         # apply transform to robot rectangle and capsule pieces
         robot_rect.set_transform(trans)
 
-        capsule_rect.set_transform(trans)
 
         # return all artists that changed (required for blitting)
-        return (path_line, robot_rect, capsule_rect)
+        return (path_line, robot_rect)
 
     anim = FuncAnimation(fig, update, frames=range(0, len(df), 10), interval=40, blit=True)
     return anim
