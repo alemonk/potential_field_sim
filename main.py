@@ -11,7 +11,7 @@ def main():
 
     # Build quiver grid for visualization
     GX, GY, U, V = build_force_grid(
-        x_min=0, x_max=100, y_min=-10, y_max=10, nx=50, ny=10,
+        x_min=0, x_max=100, y_min=-10, y_max=10, nx=100, ny=20,
         obstacles=OBSTACLES, target=cfg.TARGET
     )
 
@@ -21,7 +21,7 @@ def main():
     plt.show()
 
     # Time series plots
-    plot_time_series(df)
+    # plot_time_series(df)
 
 if __name__ == "__main__":
     main()

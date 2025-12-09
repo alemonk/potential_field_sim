@@ -1,7 +1,7 @@
 # visualization/animator.py
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
-from matplotlib.patches import Rectangle, Circle
+from matplotlib.patches import Rectangle, Circle, Wedge
 from matplotlib.transforms import Affine2D
 import config as cfg
 
@@ -20,6 +20,10 @@ def make_animation(df, obstacles, target, GX, GY, U, V):
     robot_rect = Rectangle((-L/2, -W/2), L, W, fill=True, alpha=0.6, zorder=6, color="red")
     ax.add_patch(robot_rect)
 
+    # theta1=-90, theta2=90 creates a semicircle facing forward along positive x in robot frame
+    semicircle = Wedge((0, 0), cfg.MAX_OBST_DIST, -90, 90, facecolor="blue", alpha=0.1, zorder=4)
+    ax.add_patch(semicircle)
+
     ax.set_xlim(-5, 105)
     ax.set_ylim(-30, 30)
     ax.set_aspect("equal", adjustable="box")
@@ -29,7 +33,7 @@ def make_animation(df, obstacles, target, GX, GY, U, V):
     ax.set_ylabel("y [m]")
     ax.set_title("Potential Field Obstacle Avoidance - Animation")
 
-    ax.quiver(GX, GY, U, V, alpha=0.0, scale=80, color="blue")
+    ax.quiver(GX, GY, U, V, alpha=0.0, scale=100, color="blue")
 
     def update(frame):
         # update path
@@ -45,12 +49,12 @@ def make_animation(df, obstacles, target, GX, GY, U, V):
         # Transform: rotate about origin then translate to (x,y)
         trans = Affine2D().rotate_around(0.0, 0.0, yaw).translate(x, y) + ax.transData
 
-        # apply transform to robot rectangle and capsule pieces
+        # apply transform to robot rectangle and semicircle
+        semicircle.set_transform(trans)
         robot_rect.set_transform(trans)
 
-
         # return all artists that changed (required for blitting)
-        return (path_line, robot_rect)
+        return (path_line, robot_rect, semicircle)
 
     anim = FuncAnimation(fig, update, frames=range(0, len(df), 10), interval=40, blit=True)
     return anim
