@@ -63,18 +63,6 @@ def computePotentialFieldAvoidance(
     # Calculate Wall Repulsive Forces
     F_wall = np.zeros(2, dtype=float)
 
-    # Left Wall (x = 0) - Pushes Right (+x)
-    dist_left = robot_x - GEO_X_MIN
-    if dist_left < cfg.WALL_INFLUENCE_DIST:
-        mag = (cfg.WALL_INFLUENCE_DIST - dist_left) / cfg.WALL_INFLUENCE_DIST
-        F_wall[0] += mag * cfg.K_WALL
-
-    # Right Wall (x = 100) - Pushes Left (-x)
-    dist_right = GEO_X_MAX - robot_x
-    if dist_right < cfg.WALL_INFLUENCE_DIST:
-        mag = (cfg.WALL_INFLUENCE_DIST - dist_right) / cfg.WALL_INFLUENCE_DIST
-        F_wall[0] -= mag * cfg.K_WALL
-
     # Bottom Wall (y = -10) - Pushes Up (+y)
     dist_bottom = robot_y - GEO_Y_MIN
     if dist_bottom < cfg.WALL_INFLUENCE_DIST:
@@ -170,8 +158,20 @@ def computePotentialFieldAvoidance(
     dist_to_goal = np.linalg.norm(F_att)
     F_att = F_att / (dist_to_goal + EPS)
 
+    # Weak spring term to push robot back into trajectory
+    O = np.array(cfg.ORIGIN, dtype=float)
+    T = np.array(cfg.TARGET, dtype=float)
+    R = np.array([robot_x, robot_y], dtype=float)
+    D = T - O             # direction vector ORIGIN -> TARGET
+    R_rel = R - O         # robot relative to origin
+    proj_scalar = np.dot(R_rel, D) / np.dot(D, D)
+    proj_scalar = clampf(proj_scalar, 0.0, 1.0)
+    C = O + proj_scalar * D   # closest point on the segment
+    disp = C - R              # vector that pulls robot back to the line
+    F_path = cfg.K_PATH * disp
+
     # Combine
-    F_total = cfg.K_ANG_ATTRACT * F_att + cfg.K_REP_ANG * F_rep
+    F_total = cfg.K_ANG_ATTRACT * F_att + cfg.K_REP_ANG * F_rep + F_wall + F_path
 
     desired_heading = math.atan2(F_total[1], F_total[0])
     force_magnitude = np.linalg.norm(F_total)

@@ -21,6 +21,7 @@ MAX_ANG_RADS = 0.4
 # Force combination gains
 K_ANG_ATTRACT = 1.5
 K_REP_ANG = 10.0
+K_PATH = 0.3
 
 # Frontal cone and smoothing parameters
 SMOOTH_ALPHA = 0.25
@@ -32,14 +33,15 @@ INIT_Y = 0.0
 INIT_YAW = 0.0
 
 # Environment: goal location
+ORIGIN = (0.0, 0.0)
 TARGET = (100.0, 0.0)
 
 # Obstacle generation parameters
 X_RANGE = (10.0, 90.0)
-Y_RANGE = (-5.0, 5.0)
+Y_RANGE = (-4.0, 4.0)
 NUM_CLUSTERS = 10
 POINTS_PER_CLUSTER = 20
-STD_DEV = 1.5
+STD_DEV = 1.0
 
 # Wall Parameters
 WALL_INFLUENCE_DIST = 0.5   # (Meters) Start feeling the wall force this far away

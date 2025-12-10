@@ -24,6 +24,11 @@ def make_animation(df, obstacles, target, GX, GY, U, V):
     semicircle = Wedge((0, 0), cfg.MAX_OBST_DIST, -90, 90, facecolor="blue", alpha=0.1, zorder=4)
     ax.add_patch(semicircle)
 
+    perimeter_up = Rectangle((0,10),100,1, fill=True, alpha=1.0, zorder=6, color="black")
+    ax.add_patch(perimeter_up)
+    perimeter_down = Rectangle((0,-10),100,-1, fill=True, alpha=1.0, zorder=6, color="black")
+    ax.add_patch(perimeter_down)
+
     ax.set_xlim(-5, 105)
     ax.set_ylim(-30, 30)
     ax.set_aspect("equal", adjustable="box")
