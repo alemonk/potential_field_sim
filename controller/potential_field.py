@@ -1,4 +1,3 @@
-# controller/potential_field.py
 import math
 import numpy as np
 from controller.geometry import clampf, wrapToPi, quantize
@@ -13,6 +12,14 @@ GEO_X_MIN = 0.0
 GEO_X_MAX = 100.0
 GEO_Y_MIN = -10.0
 GEO_Y_MAX = 10.0
+
+# ---- PF front-lock state (module persistent) ----
+# Locks PF front checking once an obstacle appears in the front corridor.
+# The lock is released only after the corridor is observed clear for
+# RELEASE_COUNT consecutive cycles.
+_pf_obst_lock = False
+_pf_clear_time = 0.0
+RELEASE_TIME = 10.0
 
 def compute_total_force_field(x, y, obstacles, target_x, target_y):
     # Attractive force (unit vector to target)
@@ -51,6 +58,8 @@ def computePotentialFieldAvoidance(
     cur_left_speed, cur_right_speed,
     wheel_base_m
 ):
+    global _pf_obst_lock, _pf_clear_time
+
     # Safety Check: Out of Bounds
     # If we are already outside, STOP immediately.
     # We add a small buffer (EPS) to avoid floating point flicker at the exact edge.
@@ -83,6 +92,10 @@ def computePotentialFieldAvoidance(
     closest_obs = None
     closest_dist = float("inf")
 
+    # We'll compute candidate obstacles while also tracking whether any obstacle
+    # is currently inside the front corridor (abs(yr) <= HS + 1.5).
+    any_in_front_current = False
+
     for ox, oy in obstacles:
         dx = ox - robot_x
         dy = oy - robot_y
@@ -91,10 +104,28 @@ def computePotentialFieldAvoidance(
         xr =  cy * dx + sy * dy
         yr = -sy * dx + cy * dy
 
-        if np.linalg.norm([xr, yr]) > cfg.MAX_OBST_DIST:
-            continue
-        if xr < 0.0:
-            continue
+        # track if any obstacle is actually in the corridor right now
+        in_front_band = abs(yr) <= (HS + 1.5)
+
+        if xr >= 0.0 and np.linalg.norm([xr, yr]) <= cfg.MAX_OBST_DIST and in_front_band:
+            any_in_front_current = True
+
+        # If not locked, enforce the original corridor check to ignore side obstacles.
+        # If locked, accept obstacles regardless of yr because we are committed until corridor clears.
+        if not _pf_obst_lock:
+            if np.linalg.norm([xr, yr]) > cfg.MAX_OBST_DIST:
+                continue
+            if xr < 0.0:
+                continue
+            if not in_front_band:
+                continue
+        else:
+            # locked: still skip obstacles that are out of range or behind
+            if np.linalg.norm([xr, yr]) > cfg.MAX_OBST_DIST:
+                continue
+            if xr < 0.0:
+                continue
+            # do not continue on yr check while locked; we accept them for processing
 
         if xr > HF:
             dxm = xr - HF
@@ -116,6 +147,20 @@ def computePotentialFieldAvoidance(
             closest_dist = margin_dist
             closest_obs = (quantize(ox, 0.05), quantize(oy, 0.05))
 
+    # Update lock state using any_in_front_current
+    if not _pf_obst_lock:
+        if any_in_front_current:
+            _pf_obst_lock = True
+            _pf_clear_time = 0.0
+    else:
+        if not any_in_front_current:
+            _pf_clear_time += cfg.DT
+            if _pf_clear_time >= RELEASE_TIME:
+                _pf_obst_lock = False
+                _pf_clear_time = 0.0
+        else:
+            _pf_clear_time = 0.0
+    
     # Repulsive force
     F_rep = np.zeros(2, dtype=float)
 
@@ -165,7 +210,7 @@ def computePotentialFieldAvoidance(
     D = T - O             # direction vector ORIGIN -> TARGET
     R_rel = R - O         # robot relative to origin
     proj_scalar = np.dot(R_rel, D) / np.dot(D, D)
-    proj_scalar = clampf(proj_scalar, 0.0, 1.0)
+    proj_scalar = max(0, clampf(proj_scalar, 0.0, 1.0))
     C = O + proj_scalar * D   # closest point on the segment
     disp = C - R              # vector that pulls robot back to the line
     F_path = cfg.K_PATH * disp

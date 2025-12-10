@@ -24,7 +24,7 @@ K_REP_ANG = 10.0
 K_PATH = 0.3
 
 # Frontal cone and smoothing parameters
-SMOOTH_ALPHA = 0.25
+SMOOTH_ALPHA = 0.9
 QUANTIZE_STEP = 1e-5
 
 # Initial robot state
