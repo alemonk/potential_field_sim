@@ -6,6 +6,23 @@ import config as cfg
 
 EPS = 1e-6
 
+# --- Bump Maneuver State ---
+# When a bump is triggered, we first reverse 1m, then rotate 90°.
+BUMP_ACTIVE = False
+BUMP_PHASE = 0  # 0=back up, 1=rotate, 2=done
+BUMP_START_XY = (0.0, 0.0)
+BUMP_TARGET_YAW = 0.0
+BUMP_TRIGGER_COUNT = 0  # Track consecutive bumps to detect loops
+BUMP_BACKUP_DIST = 1.0  # Backup distance in meters
+BUMP_ROTATION_ANGLE = math.pi / 2.0  # Rotation angle in radians (90°)
+
+# Tunable bump speeds
+BUMP_BACK_SPEED = 0.2      # m/s backwards
+BUMP_ANG_RATE = 0.8        # rad/s rotation
+BUMP_LOOP_THRESHOLD = 3    # Trigger count threshold before aggressive strategy
+BUMP_LOOP_BACKUP_DIST = 2.0  # Aggressive backup distance (2m)
+BUMP_LOOP_ROTATION_ANGLE = math.pi  # Aggressive rotation (180°)
+
 # --- Geofencing Configuration ---
 # Perimeter: (0,-10), (0,10), (100,-10), (100,10)
 # This forms a rectangle:
@@ -51,6 +68,39 @@ def computePotentialFieldAvoidance(
     cur_left_speed, cur_right_speed,
     wheel_base_m
 ):
+    global BUMP_ACTIVE, BUMP_PHASE, BUMP_START_XY, BUMP_TARGET_YAW
+
+    # If a bump maneuver is active, run it before any field logic
+    if BUMP_ACTIVE:
+        if BUMP_PHASE == 0:
+            # Phase 0: move backwards until 1m from start
+            dx = robot_x - BUMP_START_XY[0]
+            dy = robot_y - BUMP_START_XY[1]
+            dist = math.hypot(dx, dy)
+            if dist < 1.0 - EPS:
+                v = -BUMP_BACK_SPEED
+                omega = 0.0
+                v_left = v - omega * (wheel_base_m * 0.5)
+                v_right = v + omega * (wheel_base_m * 0.5)
+                return v_left, v_right, False
+            else:
+                # proceed to rotation phase
+                BUMP_PHASE = 1
+
+        if BUMP_PHASE == 1:
+            # Phase 1: rotate to target yaw (90° from trigger yaw)
+            yaw_err = wrapToPi(BUMP_TARGET_YAW - robot_yaw)
+            if abs(yaw_err) > (5.0 * math.pi / 180.0):  # 5° tolerance
+                omega = clampf(yaw_err, -BUMP_ANG_RATE, BUMP_ANG_RATE)
+                v = 0.0
+                v_left = v - omega * (wheel_base_m * 0.5)
+                v_right = v + omega * (wheel_base_m * 0.5)
+                return v_left, v_right, False
+            else:
+                # Done
+                BUMP_ACTIVE = False
+                BUMP_PHASE = 2
+                # fall through to normal logic after finishing
     # Safety Check: Out of Bounds
     # If we are already outside, STOP immediately.
     # We add a small buffer (EPS) to avoid floating point flicker at the exact edge.
@@ -59,6 +109,20 @@ def computePotentialFieldAvoidance(
         # Determine closest point inside for recovery (optional, but good for debugging)
         # For now, we return the stop flag as requested for safety.
         return 0.0, 0.0, True
+
+    # Wall-based bump: if robot y is close to ±10, trigger 180° bump maneuver
+    if abs(robot_y - (-10)) < 0.3 or abs(robot_y - 10) < 0.3:
+        if not BUMP_ACTIVE:
+            BUMP_ACTIVE = True
+            BUMP_PHASE = 0
+            BUMP_START_XY = (robot_x, robot_y)
+            BUMP_TARGET_YAW = wrapToPi(robot_yaw + math.pi)  # 180° turn
+            # Immediate command: begin backing up
+            v = -BUMP_BACK_SPEED
+            omega = 0.0
+            v_left = v - omega * (wheel_base_m * 0.5)
+            v_right = v + omega * (wheel_base_m * 0.5)
+            return v_left, v_right, False
 
     # Calculate Wall Repulsive Forces
     F_wall = np.zeros(2, dtype=float)
@@ -138,7 +202,24 @@ def computePotentialFieldAvoidance(
             obs_dist = math.hypot(xr, yr)
 
             if d < (cfg.MIN_OBST_DIST + cfg.MARGIN):
-                return 0.2, -0.2, False
+                # Trigger bump: start backup phase and rotate away from obstacle
+                # If obstacle is on the right (yr > 0), rotate left (+pi/2)
+                # If obstacle is on the left (yr < 0), rotate right (-pi/2)
+                BUMP_ACTIVE = True
+                BUMP_PHASE = 0
+                BUMP_START_XY = (robot_x, robot_y)
+                if yr > 0.0:
+                    # Obstacle on right -> turn left
+                    BUMP_TARGET_YAW = wrapToPi(robot_yaw + math.pi / 2.0)
+                else:
+                    # Obstacle on left -> turn right
+                    BUMP_TARGET_YAW = wrapToPi(robot_yaw - math.pi / 2.0)
+                # Immediate command: begin backing up
+                v = -BUMP_BACK_SPEED
+                omega = 0.0
+                v_left = v - omega * (wheel_base_m * 0.5)
+                v_right = v + omega * (wheel_base_m * 0.5)
+                return v_left, v_right, False
 
             if obs_dist > EPS and xr >= 0.0:
                 rep_mag = (cfg.MAX_OBST_DIST - obs_dist) / cfg.MAX_OBST_DIST
