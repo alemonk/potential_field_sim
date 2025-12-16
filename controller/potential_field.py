@@ -24,12 +24,12 @@ BUMP_LOOP_BACKUP_DIST = 2.0  # Aggressive backup distance (2m)
 BUMP_LOOP_ROTATION_ANGLE = math.pi  # Aggressive rotation (180°)
 
 # --- Geofencing Configuration ---
-# Perimeter: (0,-10), (0,10), (100,-10), (100,10)
-# This forms a rectangle:
+# Perimeter: Square region - dynamically read from config
+import config as cfg
 GEO_X_MIN = 0.0
-GEO_X_MAX = 100.0
-GEO_Y_MIN = -10.0
-GEO_Y_MAX = 10.0
+GEO_X_MAX = cfg.SQUARE_SIZE
+GEO_Y_MIN = 0.0
+GEO_Y_MAX = cfg.SQUARE_SIZE
 
 def compute_total_force_field(x, y, obstacles, target_x, target_y):
     # Attractive force (unit vector to target)
@@ -64,6 +64,7 @@ def compute_total_force_field(x, y, obstacles, target_x, target_y):
 def computePotentialFieldAvoidance(
     robot_x, robot_y, robot_yaw,
     target_x, target_y,
+    prev_x, prev_y,
     obstacles,
     cur_left_speed, cur_right_speed,
     wheel_base_m
@@ -110,8 +111,9 @@ def computePotentialFieldAvoidance(
         # For now, we return the stop flag as requested for safety.
         return 0.0, 0.0, True
 
-    # Wall-based bump: if robot y is close to ±10, trigger 180° bump maneuver
-    if abs(robot_y - (-10)) < 0.3 or abs(robot_y - 10) < 0.3:
+    # Wall-based bump: if robot is close to any wall, trigger 180° bump maneuver
+    if (abs(robot_y - GEO_Y_MIN) < 0.3 or abs(robot_y - GEO_Y_MAX) < 0.3 or
+        abs(robot_x - GEO_X_MIN) < 0.3 or abs(robot_x - GEO_X_MAX) < 0.3):
         if not BUMP_ACTIVE:
             BUMP_ACTIVE = True
             BUMP_PHASE = 0
@@ -239,18 +241,22 @@ def computePotentialFieldAvoidance(
     dist_to_goal = np.linalg.norm(F_att)
     F_att = F_att / (dist_to_goal + EPS)
 
-    # Weak spring term to push robot back into trajectory
-    O = np.array(cfg.ORIGIN, dtype=float)
-    T = np.array(cfg.TARGET, dtype=float)
-    R = np.array([robot_x, robot_y], dtype=float)
-    D = T - O             # direction vector ORIGIN -> TARGET
-    R_rel = R - O         # robot relative to origin
-    proj_scalar = np.dot(R_rel, D) / np.dot(D, D)
-    proj_scalar = clampf(proj_scalar, 0.0, 1.0)
-    C = O + proj_scalar * D   # closest point on the segment
-    disp = C - R              # vector that pulls robot back to the line
-    F_path = cfg.K_PATH * disp
-
+    # Weak spring term to push robot back to the line from previous waypoint to current target
+    O = np.array([prev_x, prev_y], dtype=float)  # Previous waypoint
+    T = np.array([target_x, target_y], dtype=float)  # Current target
+    R = np.array([robot_x, robot_y], dtype=float)  # Robot position
+    D = T - O  # Direction vector from previous waypoint to current target
+    D_len_sq = np.dot(D, D)
+    if D_len_sq > EPS:
+        R_rel = R - O  # Robot relative to previous waypoint
+        proj_scalar = np.dot(R_rel, D) / D_len_sq
+        proj_scalar = clampf(proj_scalar, 0.0, 1.0)
+        C = O + proj_scalar * D  # Closest point on the segment
+        disp = C - R  # Vector that pulls robot back to the line
+        F_path = cfg.K_PATH * disp
+    else:
+        F_path = np.zeros(2, dtype=float)
+    
     # Combine
     F_total = cfg.K_ANG_ATTRACT * F_att + cfg.K_REP_ANG * F_rep + F_wall + F_path
 

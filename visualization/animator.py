@@ -5,12 +5,20 @@ from matplotlib.patches import Rectangle, Circle, Wedge
 from matplotlib.transforms import Affine2D
 import config as cfg
 
-def make_animation(df, obstacles, target, GX, GY, U, V):
-    fig, ax = plt.subplots(figsize=(16, 8))
+def make_animation(df, obstacles, waypoints, GX, GY, U, V):
+    fig, ax = plt.subplots(figsize=(12, 12))
 
     ax.scatter([o[0] for o in obstacles], [o[1] for o in obstacles],
                s=50, marker="o", color="black", label="obstacles")
-    ax.scatter([target[0]], [target[1]], s=120, marker="*", color="green", label="target")
+    
+    # Plot all waypoints
+    ax.scatter([w[0] for w in waypoints], [w[1] for w in waypoints],
+               s=120, marker="*", color="green", label="waypoints", zorder=10)
+    
+    # Draw lines connecting waypoints to show the path
+    waypoint_xs = [w[0] for w in waypoints]
+    waypoint_ys = [w[1] for w in waypoints]
+    ax.plot(waypoint_xs, waypoint_ys, 'g--', alpha=0.5, linewidth=1, label="planned path")
 
     path_line, = ax.plot([], [], linewidth=1, color="red")
 
@@ -24,19 +32,26 @@ def make_animation(df, obstacles, target, GX, GY, U, V):
     semicircle = Wedge((0, 0), cfg.MAX_OBST_DIST, -90, 90, facecolor="blue", alpha=0.1, zorder=4)
     ax.add_patch(semicircle)
 
-    perimeter_up = Rectangle((0,10),100,1, fill=True, alpha=1.0, zorder=6, color="black")
-    ax.add_patch(perimeter_up)
-    perimeter_down = Rectangle((0,-10),100,-1, fill=True, alpha=1.0, zorder=6, color="black")
-    ax.add_patch(perimeter_down)
+    # Draw square boundary walls
+    wall_thickness = 0.5
+    size = cfg.SQUARE_SIZE
+    perimeter_top = Rectangle((0, size), size, wall_thickness, fill=True, alpha=1.0, zorder=6, color="black")
+    perimeter_bottom = Rectangle((0, 0), size, -wall_thickness, fill=True, alpha=1.0, zorder=6, color="black")
+    perimeter_left = Rectangle((0, 0), -wall_thickness, size, fill=True, alpha=1.0, zorder=6, color="black")
+    perimeter_right = Rectangle((size, 0), wall_thickness, size, fill=True, alpha=1.0, zorder=6, color="black")
+    ax.add_patch(perimeter_top)
+    ax.add_patch(perimeter_bottom)
+    ax.add_patch(perimeter_left)
+    ax.add_patch(perimeter_right)
 
-    ax.set_xlim(-5, 105)
-    ax.set_ylim(-30, 30)
+    ax.set_xlim(-2, size + 2)
+    ax.set_ylim(-2, size + 2)
     ax.set_aspect("equal", adjustable="box")
     ax.grid(True)
     ax.legend()
     ax.set_xlabel("x [m]")
     ax.set_ylabel("y [m]")
-    ax.set_title("Potential Field Obstacle Avoidance - Animation")
+    ax.set_title("Potential Field Obstacle Avoidance - Lawn Mower Pattern")
 
     ax.quiver(GX, GY, U, V, alpha=0.0, scale=100, color="blue")
 

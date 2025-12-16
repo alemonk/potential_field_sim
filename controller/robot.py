@@ -14,10 +14,11 @@ class DifferentialDriveRobot:
         self.abs_speed = 0.0
         self.stop_simulation = False
 
-    def step(self, target, obstacles, dt):
+    def step(self, target, prev_target, obstacles, dt):
         outL, outR, stop_simulation = computePotentialFieldAvoidance(
             self.x, self.y, self.yaw,
             target[0], target[1],
+            prev_target[0], prev_target[1],
             obstacles,
             self.vL, self.vR,
             self.wheel_base
